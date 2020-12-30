@@ -1,18 +1,14 @@
 import struct
 import threading
 import time
+from select import select
 from socket import *
 from getch import *
 import queue
-import tty, termios, sys
 
-from multiprocessing import Process
-import asyncio
-
-# time_out = 0
 magic_cookie = 0xfeedbeef
 
-
+# function for sending the spam to the server
 def send_char(data_queue, client_tcp_socket, time_out):
     get_data_thread = threading.Thread(target=get_char, args=(data_queue, time_out))
     get_data_thread.start()
@@ -25,29 +21,23 @@ def send_char(data_queue, client_tcp_socket, time_out):
             except:  # ConnectionAbortedError | ConnectionResetError:
                 break
 
-
-# def get_from_server(client_tcp_socket):
-#     while True:
-#         try:
-#             data = client_tcp_socket.recv(1024)
-#             if not data:
-#                 break
-#         except:
-#             print("SERVER DISCONNECTED")
-#             break
-
+# function for getting message from server after the game starts
+def get_from_server(client_tcp_socket):
+    while True:
+        try:
+            data = client_tcp_socket.recv(1024)
+            print(data.decode())
+            if not data:
+                break
+        except:
+            print("SERVER DISCONNECTED")
+            break
+# function getting input chars to send to the server
 def get_char(data_queue, time_out):
     while time.time() < time_out:
         char = getch()
-        # char = sys.stdin.read(1)
         data_queue.put(char)
 
-
-# def timeout_thread(time_out):
-#     while time.time() < time_out:
-#         time.sleep(1)
-#         print(time.time())
-#     print("Game Over, press any key to continue")
 
 
 def start():
@@ -67,14 +57,14 @@ def start():
             (sent_cookie, msg_type, msg_server_port) = struct.unpack('!IbH', data)
             (ip, port) = serverAddress
 
-            if sent_cookie == magic_cookie and msg_type == 0x2 and ip == "172.1.0.73":
+            if sent_cookie == magic_cookie and msg_type == 0x2:
                 print("Received offer from: " + ip + " , attempting to connect... ")
 
                 # accepting offer, sending team name
                 client_tcp_socket = socket(AF_INET, SOCK_STREAM)
                 try:
                     client_tcp_socket.connect((ip, msg_server_port))
-                    client_tcp_socket.send("Maccabi Kempner\n".encode("utf-8"))
+                    client_tcp_socket.send("Du Pack Shakur\n".encode("utf-8"))
                 except:
                     break
 
@@ -88,13 +78,14 @@ def start():
                 time_out = time.time() + 10
 
                 send_data_thread = threading.Thread(target=send_char, args=(data_queue, client_tcp_socket, time_out,))
-                # get_from_server_thread = threading.Thread(target=get_from_server, args=(client_tcp_socket,))
+                get_from_server_thread = threading.Thread(target=get_from_server, args=(client_tcp_socket,))
                 send_data_thread.start()
-                # get_from_server_thread.start()
+                get_from_server_thread.start()
                 send_data_thread.join()
+                get_from_server_thread.join()
 
                 client_tcp_socket.close()
-                print("game over, press any key to continue")
+
                 print("Server disconnected, listening for offer requests...")
 
 

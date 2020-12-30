@@ -25,7 +25,9 @@ Reset = u"\u001b[0m"
 
 Bold = u"\u001b[1m"
 
+
 server_ip = scapy.get_if_addr("eth1")
+
 
 # serverUdpPort = 1400
 serverSocket = socket(AF_INET, SOCK_DGRAM)
@@ -34,7 +36,7 @@ serverSocket.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)  # enable broadcasts
 serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
 serverSocket.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
 
-serverTcpPort = 4322
+serverTcpPort = 5000
 server_tcp_socket = socket(AF_INET, SOCK_STREAM)
 server_tcp_socket.bind((server_ip, serverTcpPort))
 server_tcp_socket.listen(1)
@@ -48,7 +50,6 @@ def start_game():
     group2 = {}
     threaded_client_list = []
 
-    # print("Server started, listening on IP address: " + server_ip)
     print(BrightBlack + BackgroundBrightWhite_ANSI + "  Server started, listening on IP address:" + server_ip + Reset)
 
     broadcast_address = '172.1.255.255'
@@ -58,6 +59,7 @@ def start_game():
     message_type = 0x2
     invite_message = struct.pack('!IbH', magic_cookie, message_type, serverTcpPort)
 
+    # function for getting the team name from the client
     def threaded_client(connection, group_num):
         data = connection.recv(2048)
         thread_team_name = data.decode('utf-8')
@@ -73,22 +75,18 @@ def start_game():
             group2[thread_team_name] = 0
             l.release()
 
+    # function that manages the game with the client
     def thread_for_game(connection, group_name):
         my_points = 0
 
         while time.time() < global_timer:
             try:
                 connection.settimeout(max(global_timer - time.time(), 0))
-                # connection.setblocking(False)
-                # TO CHECKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
                 data = connection.recv(2048)
                 if data:
                     my_points += len(data)
             except Exception:
                 break
-
-            # if not data:
-            #     break
 
         if group_name in group1:
             l.acquire()
@@ -135,26 +133,28 @@ def start_game():
         print(BrightBlue_ANSI + "No one has connected :(" + Reset + "\n")
         return
 
+    # welcome message
     welcome_message = BrightBlack + BackgroundBrightWhite_ANSI + Bold
-    welcome_message += "    $   Welcome to Keyboard Spamming Battle Royale  $   " + Reset + "\n"
-    welcome_message += BrightGreen_ANSI + BackgroundGreen_ANSI + "  Green Group:  " + Reset + "\n ==\n" + BrightGreen_ANSI
+    welcome_message += "$   Welcome to Keyboard Spamming Battle Royale  $   " + Reset + "\n"
+    welcome_message += BrightGreen_ANSI + BackgroundGreen_ANSI + "  Green Group:  " + Reset + "\n==\n" + BrightGreen_ANSI
     for team_name in group1.keys():
         welcome_message += team_name
     welcome_message += "\n" + Reset + BackgroundBrightRed
-    welcome_message += BrightWhite + "  Red Group:  " + Reset + "\n    == \n"
+    welcome_message += BrightWhite + "  Red Group:  " + Reset + "\n== \n"
     welcome_message += BrightWhite
     for team_name in group2.keys():
         welcome_message += team_name
     welcome_message += Reset
     welcome_message += "\n\n"
-
-    welcome_message += Bold + BrightRed + " Start pressing keys on your keyboard as fast as you can ! ! !\n" + Reset
-
+    welcome_message += Bold + BrightRed + "Start pressing keys on your keyboard as fast as you can ! ! !\n" + Reset
     print(welcome_message)
+    # end welcome message
+
     for conn in teams_dictionary.values():
         conn.send(welcome_message.encode('utf-8'))
     print(BrightRed + " ************************************" + Reset)
 
+    # game starts
     l.acquire()
     global_timer = time.time() + 10
     l.release()
@@ -167,11 +167,9 @@ def start_game():
     for thread in thread_list:
         thread.start()
 
-    # for thread in thread_list:
-    #     thread.join()
-
     time.sleep(10)
 
+    # end of the game , calculating winners
     sum1 = 0
     sum2 = 0
     for points in group1.values():
@@ -201,6 +199,7 @@ def start_game():
         else:
             is_tie = True
 
+
     print(Bold + BrightRed +
           """
            _____       ___       ___  ___   _____  
@@ -227,17 +226,22 @@ def start_game():
         sum2) + " characters." + Reset + "\n"
     if not is_tie:
         end_message += winner_group + BrightBlack + BackgroundBrightWhite_ANSI + " wins!" + Reset + "\n"
-        end_message += BrightBlack + BackgroundBrightWhite_ANSI + "   Congratulations to the winners:" + Reset + "\n==\n" + winner_teams
+        end_message += BrightBlack + BackgroundBrightWhite_ANSI + "Congratulations to the winners:" + Reset + "\n==\n" + winner_teams
     else:
         end_message += BrightBlack + BackgroundBrightWhite_ANSI + "TEKO TEKO!!!!!!!!!" + Reset + "\n"
 
+    for conn in teams_dictionary.values():
+        try:
+            conn.send(end_message.encode())
+        except:
+            pass
     print(end_message)
 
     for conn in teams_dictionary.values():
         conn.close()
 
+    print("Server Reloading")
     time.sleep(7)
-    # server_tcp_socket.close()
 
 
 while True:
