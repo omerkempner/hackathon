@@ -3,10 +3,14 @@ import threading
 import time
 from select import select
 from socket import *
+
+# import scapy
 from getch import *
 import queue
 
 magic_cookie = 0xfeedbeef
+# client_ip = scapy.get_if_addr("eth1")      ^^^^^^^^^^6
+client_ip = ''
 
 # function for sending the spam to the server
 def send_char(data_queue, client_tcp_socket, time_out):
@@ -43,7 +47,7 @@ def get_char(data_queue, time_out):
 def start():
     while True:
         client_udp_socket = socket(AF_INET, SOCK_DGRAM)
-        client_udp_socket.bind(('', 13117))
+        client_udp_socket.bind((client_ip, 13117))
         client_udp_socket.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
 
         client_udp_socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
@@ -70,8 +74,17 @@ def start():
 
                 in_game = True
                 client_udp_socket.close()
-                data = client_tcp_socket.recv(1024)
-                print(data.decode())
+                got_msg = False
+
+                time_out_for_starting_game = time.time() + 20
+                try:
+                    client_tcp_socket.settimeout(max(time_out_for_starting_game - time.time(), 0))
+                    data = client_tcp_socket.recv(2048)
+                    print(data.decode())
+                    got_msg = True
+                except Exception:
+                    print("SERVER DID NOT START GAME")
+                    break
 
                 # game starting
                 data_queue = queue.Queue()
