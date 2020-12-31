@@ -4,7 +4,7 @@ from socket import *
 # from _thread import *
 import threading
 
-# import scapy.all as scapy             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+import scapy.all as scapy
 
 l = threading.Lock()
 
@@ -17,51 +17,43 @@ BrightMagenta = u"\u001b[35;1m"
 BrightCyan = u"\u001b[36;1m"
 BrightWhite = u"\u001b[37;1m"
 Black = u"\u001b[30m"
-
 BackgroundBrightWhite_ANSI = u"\u001b[47;1m"
 BackgroundGreen_ANSI = u"\u001b[42m"
 BackgroundBrightRed = u"\u001b[41;1m"
-
 Reset = u"\u001b[0m"
-
 Bold = u"\u001b[1m"
 
-server_ip = ""
-# server_ip = scapy.get_if_addr("eth1")  ^^^^^^^^^^^^^^^^^^^^^^^^^^6
+accepting_time = 10
+game_time = 10
+reloading_time = 7
 
-
+server_ip = scapy.get_if_addr("eth1")
 serverSocket = socket(AF_INET, SOCK_DGRAM)
-# serverSocket.bind((server_ip, 0))            ^^^^^^^^^^^^^^^^^^^^^^6
-serverSocket.bind(('', 0))
+serverSocket.bind((server_ip, 0))
 serverSocket.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)  # enable broadcasts
 serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
 serverSocket.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
 
-# serverTcpPort = 5000
-
 server_tcp_socket = socket(AF_INET, SOCK_STREAM)
-# server_tcp_socket.bind((server_ip, serverTcpPort))   ^^^^^^^^^^^^^66
-server_tcp_socket.bind(('', 0))
+server_tcp_socket.bind((server_ip, 0))
 server_tcp_socket.listen(1)
+
+broadcast_address = '172.1.255.255'
+broadcast_port = 13117
+
+magic_cookie = 0xfeedbeef
+message_type = 0x2
+server_tcp_port = server_tcp_socket.getsockname()[1]
 
 
 def start_game():
     global_timer = 0
-
     teams_dictionary = {}
     group1 = {}
     group2 = {}
     threaded_client_list = {}
-
     print(BrightBlack + BackgroundBrightWhite_ANSI + "  Server started, listening on IP address:" + server_ip + Reset)
 
-    # broadcast_address = '172.1.255.255'          ^^^^^^^^^^^^^^
-    broadcast_address = '255.255.255.255'
-    broadcast_port = 13117
-
-    magic_cookie = 0xfeedbeef
-    message_type = 0x2
-    server_tcp_port = server_tcp_socket.getsockname()[1]
     invite_message = struct.pack('!IbH', magic_cookie, message_type, server_tcp_port)
 
     # function that manages the game with the client
@@ -89,23 +81,15 @@ def start_game():
     # function for getting the team name from the client
     def threaded_client(connection, group_num, timer_for_connections, index):
         got_team_name = False
-        while time.time() < timer_for_connections and (not got_team_name):
-            try:
-                # connection.settimeout(max(timer_for_connections - time.time(), 0))
-                data = connection.recv(2048)
-                got_team_name = True
-            except Exception:
-                break
-        # try:
-        #     # connection.settimeout(max(timer_for_connections - time.time(), 0))
-        #     data = connection.recv(2048)
-        #     got_team_name = True
-        # except Exception:
-        #     return
+        try:
+            connection.settimeout(max(timer_for_connections - time.time(), 0))
+            data = connection.recv(2048)
+            got_team_name = True
+        except Exception:
+            return
 
         if got_team_name:
             thread_team_name = data.decode('utf-8')
-            print(thread_team_name)
             l.acquire()
             teams_dictionary[thread_team_name] = connection
             l.release()
@@ -123,7 +107,7 @@ def start_game():
 
     def accept_connections():
         index_for_threads = 0
-        timer_for_connections = time.time() + 10  # 10 seconds from now
+        timer_for_connections = time.time() + accepting_time
         group_assignment = True
         while time.time() < timer_for_connections:
             try:
@@ -132,8 +116,6 @@ def start_game():
             except Exception:
                 break
 
-            print('Connected to: ' + address[0] + ':' + str(address[1]))  # DELETE
-
             if group_assignment:
                 group_num = 1
             else:
@@ -141,10 +123,10 @@ def start_game():
 
             group_assignment = not group_assignment
             index_for_threads = index_for_threads + 1
-            t = threading.Thread(target=threaded_client, args=(conn, group_num, timer_for_connections,index_for_threads,))
+            t = threading.Thread(target=threaded_client,
+                                 args=(conn, group_num, timer_for_connections, index_for_threads,))
             threaded_client_list[index_for_threads] = t
             t.start()
-
 
         # for t in threaded_client_list:
         #     t.start()
@@ -161,7 +143,6 @@ def start_game():
     if len(threaded_client_list) == 0 or len(teams_dictionary) == 0:
         print(BrightBlue_ANSI + "No one has connected, or No one sent team name :(" + Reset + "\n")
         return
-
 
     # welcome message
     welcome_message = BrightBlack + BackgroundBrightWhite_ANSI + Bold
@@ -186,7 +167,7 @@ def start_game():
 
     # game starts
     l.acquire()
-    global_timer = time.time() + 10
+    global_timer = time.time() + game_time
     l.release()
 
     thread_list = []
@@ -197,7 +178,7 @@ def start_game():
     for thread in thread_list:
         thread.start()
 
-    time.sleep(10)
+    time.sleep(game_time)
 
     # end of the game , calculating winners
     sum1 = 0
@@ -237,14 +218,14 @@ def start_game():
           | |  _    / ___ |   / / |__/ | | |  __|  
           | |_| |  / /  | |  / /       | | | |___  
           \_____/ /_/   |_| /_/        |_| |_____|
-  
+
            _____   _     _   _____   _____   
           /  _  \ | |   / / |  ___| |  _  \  
           | | | | | |  / /  | |__   | |_| |  
           | | | | | | / /   |  __|  |  _  /  
           | |_| | | |/ /    | |___  | | \ \  
           \_____/ |___/     |_____| |_|  \_\
-  
+
           """ + Reset
           )
     end_message = "" + Reset
@@ -270,7 +251,7 @@ def start_game():
         conn.close()
 
     print("Server Reloading")
-    time.sleep(7)
+    time.sleep(reloading_time)
 
 
 while True:
